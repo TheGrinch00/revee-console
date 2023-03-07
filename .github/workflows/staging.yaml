@@ -1,0 +1,50 @@
+name: Staging
+on:
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2 
+
+      - name: Docker Login
+        uses: docker/login-action@v1.9.0
+        with:
+          registry: core.harbor.cluster.jetop.com
+          username: ${{secrets.HARBOR_USERNAME}}
+          password: ${{secrets.HARBOR_PASSWORD}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v2.4.0
+        with:
+          context: .
+          push: true
+          tags: |
+            core.harbor.cluster.jetop.com/revee-1/console:${{github.sha}}
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Target Repository
+        uses: actions/checkout@v2
+        with:
+          repository: JEToP/infrastructure
+          token: ${{ secrets.PUSH_TOKEN }} 
+
+      - name: Update Image Version in the related HelmChart values.yaml
+        uses: fjogeleit/yaml-update-action@v0.6.2
+        with:
+          valueFile: 'deployments/revee 2/console/values.yaml'
+          propertyPath: 'generic-app.image.tag'
+          value: ${{ github.sha }}
+          repository: JEToP/infrastructure
+          branch: main
+          targetBranch: main
+          message: 'Update Image Version to ${{ github.sha}}'
+          token: ${{ secrets.PUSH_TOKEN }}
